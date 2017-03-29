@@ -1,3 +1,9 @@
+# fw
+/fw/Debug/
+/fw/fw.componentinfo.xml
+/fw/.vs/
+
+
 # Compiled Object files
 *.slo
 *.lo
