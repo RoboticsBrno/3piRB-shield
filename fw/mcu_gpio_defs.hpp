@@ -35,6 +35,11 @@ pin_t pin_led_5(PORTK, 5);
 pin_t pin_led_6(PORTK, 6);
 pin_t pin_led_7(PORTK, 7);
 
+pin_t pin_AREF_EN(PORTJ, 5);
+pin_t pin_IR_front(PORTC, 5);
+pin_t pin_IR_back_left_right(PORTC, 4);
+pin_t pin_IR1(PORTA, 1);
+
 
 void init_mcu_gpio()
 {
@@ -56,8 +61,10 @@ void init_mcu_gpio()
 	pin_led_5.make_output();
 	pin_led_6.make_output();
 	pin_led_7.make_output();
-
-
+	
+	pin_AREF_EN.make_output(); // enable 2,5 V stabilizer for IR phototransistor 
+	pin_IR_front.make_output(); // enable front IR leds
+	pin_IR_back_left_right.make_output();
 
 
 }

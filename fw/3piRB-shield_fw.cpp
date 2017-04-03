@@ -40,6 +40,7 @@ ISR(USARTF0_RXC_vect) { bt_uart.intr_rx(); }
 
 void process();
 
+#include "adc.hpp"
 #include "mcu_gpio_defs.hpp"
 #include "miscellaneous.hpp"
 #include "serial_number.hpp"
@@ -130,6 +131,7 @@ void process()
 	
 	bt_uart.process_tx();
 	debug.process_tx();
+	adc_t::process_all();
 }
 
 template<typename Serial, typename T>
@@ -144,6 +146,33 @@ void dump_modul_settings(Serial& serial, const T& module, const char* msg = null
 		format(serial, "%x2: %x2\n") % i % *ptr;
 		++ptr;
 	}
+}
+
+uint16_t ReadADC(uint8_t Channel, uint8_t ADCMode) // Mode = 1 for single ended, 0 for internal
+{
+	if ((ADCA.CTRLA & ADC_ENABLE_bm) == 0)
+	{
+		ADCA.CTRLA = ADC_ENABLE_bm ; // Enable the ADC
+		ADCA.CTRLB = (1<<4); // Signed Mode
+		ADCA.REFCTRL = ADC_REFSEL_INTVCC_gc; // Internal 1v ref
+		ADCA.EVCTRL = 0 ; // no events
+		ADCA.PRESCALER = ADC_PRESCALER_DIV32_gc ;
+// 		ADCA.CALL = ReadSignatureByte(0x20) ; //ADC Calibration Byte 0
+// 		ADCA.CALH = ReadSignatureByte(0x21) ; //ADC Calibration Byte 1
+		//ADCA.SAMPCTRL = This register does not exist
+		_delay_us(400); // Wait at least 25 clocks
+	}
+	ADCA.CH0.CTRL = ADC_CH_INPUTMODE_SINGLEENDED_gc ; // Gain = 1, Single Ended
+	ADCA.CH0.MUXCTRL = (Channel<<3);
+	ADCA.CH0.INTCTRL = 0 ; // No interrupt
+	//ADCA.CH0.SCAN Another bogus register
+	for(uint8_t Waste = 0; Waste<2; Waste++)
+	{
+		ADCA.CH0.CTRL |= ADC_CH_START_bm; // Start conversion
+		while (ADCA.INTFLAGS==0) ; // Wait for complete
+		ADCA.INTFLAGS = ADCA.INTFLAGS ;
+	}
+	return ADCA.CH0RES ;
 }
 
 int main(void)
@@ -178,11 +207,31 @@ int main(void)
 	}
 	led_2.green.blink(msec(500));
 	
+	// adc init
+	adc_t::init();
+
+	adc_t adc_IR1(1);
+	adc_t adc_IR2(2);
+	adc_t adc_IR3(3);
+
+	adc_t adc_I(11);
+	adc_t adc_Iref(12);
+	adc_t adc_Vbat(13);
+	adc_t adc_3pi_Vbst(14);
+	adc_t adc_Bat_charg_stat(15);
+	
+	format(debug, "adc_Vbat.pin(): %  - max_index: % \n") % adc_Vbat.pin() % adc_Vbat.max_index();
+	
+	pin_AREF_EN.make_high();
+	pin_IR_front.make_high();
+	
 	// interrupt stop btn
 	//stop_btn.pin().port.INTFLAGS = PORT_INT0IF_bm | PORT_INT1IF_bm;
 	//stop_btn.pin().port.INTCTRL = PORT_INT0LVL_HI_gc;
 	
 	char ch = 0;
+
+	timeout debug_sender(msec(500));
 
 	for(;;)
 	{
@@ -195,6 +244,19 @@ int main(void)
 				debug.write('\n');
 				break;
 			}
+		}
+
+		if(debug_sender) 
+ 		{
+			format(debug, "I: % \t Iref: % \t Vbat: % \t %  \t %  \t %  \t % \n")
+				% adc_I.value()
+				% adc_Iref.value()
+				% adc_Vbat.value()
+				% adc_3pi_Vbst()
+				% adc_IR1()
+				% adc_IR2()
+				% adc_IR3();
+	
 		}
 
 		process();
