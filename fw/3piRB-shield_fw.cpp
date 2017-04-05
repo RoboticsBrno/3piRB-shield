@@ -38,6 +38,10 @@ typedef avrlib::async_usart<avrlib::uart_xmega, BT_UART_RX_BUFF_SIZE, BT_UART_TX
 bt_uart_t bt_uart;
 ISR(USARTF0_RXC_vect) { bt_uart.intr_rx(); }
 
+uint16_t Vbat_destruction_low_voltage = 2140; // 2140 = cca. 3,2 V
+uint16_t Vbat_critical_low_voltage = 2300; // 2300 = cca. 3,3 V
+uint16_t Vbat_standard_voltage = 2530; // 2530 = 3,7 v
+uint16_t Vbat_max_voltage = 2840; // 2840 = 4,2 v
 void process();
 
 #include "adc.hpp"
@@ -148,31 +152,24 @@ void dump_modul_settings(Serial& serial, const T& module, const char* msg = null
 	}
 }
 
-uint16_t ReadADC(uint8_t Channel, uint8_t ADCMode) // Mode = 1 for single ended, 0 for internal
+void shutdown()
 {
-	if ((ADCA.CTRLA & ADC_ENABLE_bm) == 0)
-	{
-		ADCA.CTRLA = ADC_ENABLE_bm ; // Enable the ADC
-		ADCA.CTRLB = (1<<4); // Signed Mode
-		ADCA.REFCTRL = ADC_REFSEL_INTVCC_gc; // Internal 1v ref
-		ADCA.EVCTRL = 0 ; // no events
-		ADCA.PRESCALER = ADC_PRESCALER_DIV32_gc ;
-// 		ADCA.CALL = ReadSignatureByte(0x20) ; //ADC Calibration Byte 0
-// 		ADCA.CALH = ReadSignatureByte(0x21) ; //ADC Calibration Byte 1
-		//ADCA.SAMPCTRL = This register does not exist
-		_delay_us(400); // Wait at least 25 clocks
-	}
-	ADCA.CH0.CTRL = ADC_CH_INPUTMODE_SINGLEENDED_gc ; // Gain = 1, Single Ended
-	ADCA.CH0.MUXCTRL = (Channel<<3);
-	ADCA.CH0.INTCTRL = 0 ; // No interrupt
-	//ADCA.CH0.SCAN Another bogus register
-	for(uint8_t Waste = 0; Waste<2; Waste++)
-	{
-		ADCA.CH0.CTRL |= ADC_CH_START_bm; // Start conversion
-		while (ADCA.INTFLAGS==0) ; // Wait for complete
-		ADCA.INTFLAGS = ADCA.INTFLAGS ;
-	}
-	return ADCA.CH0RES ;
+	send(debug, "\tShutdown!\n");
+	debug.flush();
+	led_2.green.off();
+	led_2.red.on();
+	process();
+
+	pin_SHDN.set_high();
+}
+
+template <typename Stream>
+void send_avakar_packet(Stream & s, uint8_t id, int16_t value) {
+	s.write(0x80);
+	s.write(id << 4 | 2);
+	s.write(value & 0xFF);
+	s.write(value >> 8);
+	s.flush();
 }
 
 int main(void)
@@ -200,19 +197,44 @@ int main(void)
 	
 	run_leds();
 
+	debug.flush();
+
+	_delay_ms(1000);
+	
 	for(auto l: leds)
 	{
 		l->red.off();
 		l->green.off();
 	}
-	led_2.green.blink(msec(500));
-	
+
+	//leds[get_led_near_sensor(9)]->green.blink(msec(500));
+	leds[sensor_to_led(9)]->green.on();
+
 	// adc init
 	adc_t::init();
-
+	
 	adc_t adc_IR1(1);
 	adc_t adc_IR2(2);
 	adc_t adc_IR3(3);
+	adc_t adc_IR4(4);
+	adc_t adc_IR5(5);
+	adc_t adc_IR6(6);
+	adc_t adc_IR7(7);
+	adc_t adc_IR8(8);
+	adc_t adc_IR9(9);
+
+	const uint8_t ADC_IR_COUNT = 9;
+	adc_t * adc_IR[ADC_IR_COUNT] = {
+		&adc_IR1,
+		&adc_IR2,
+		&adc_IR3,
+		&adc_IR4,
+		&adc_IR5,
+		&adc_IR6,
+		&adc_IR7,
+		&adc_IR8,
+		&adc_IR9
+	};
 
 	adc_t adc_I(11);
 	adc_t adc_Iref(12);
@@ -224,14 +246,23 @@ int main(void)
 	
 	pin_AREF_EN.make_high();
 	pin_IR_front.make_high();
+	pin_IR_back_left_right.make_high();
 	
 	// interrupt stop btn
 	//stop_btn.pin().port.INTFLAGS = PORT_INT0IF_bm | PORT_INT1IF_bm;
 	//stop_btn.pin().port.INTCTRL = PORT_INT0LVL_HI_gc;
 	
 	char ch = 0;
+	uint16_t time_cnt = 0;
 
-	timeout debug_sender(msec(500));
+	timeout debug_sender(msec(100000));
+
+	while(pin_PWR_BTN.read()) {
+		process();
+	}
+
+	uint16_t led_round = 0;
+	bool Vbat_critical_value_activate = false;
 
 	for(;;)
 	{
@@ -243,22 +274,77 @@ int main(void)
 			case '\r':
 				debug.write('\n');
 				break;
+			case 's':
+			case 'S':
+				shutdown();
+				break;
+			default:
+				debug.write(ch);
 			}
 		}
 
-		if(debug_sender) 
+		if(debug_sender()) 
  		{
-			format(debug, "I: % \t Iref: % \t Vbat: % \t %  \t %  \t %  \t % \n")
+			// IR sensors debug
+			format(debug, "%5 - ") % time_cnt;
+			for(int i = 0; i < ADC_IR_COUNT; i++)
+			{
+				format(debug, "% : %4 \t") % i % adc_IR[i]->value();
+
+				// set period of leds by value from adc - doesn't work
+				leds[sensor_to_led(i)]->green.blink(msec(adc_IR[i]->value()/128));
+				send_avakar_packet(bt_uart, i, adc_IR[i]->value());
+				
+			}
+			format(debug, "I: % \t Iref: % \t Vbat: % ")
 				% adc_I.value()
 				% adc_Iref.value()
-				% adc_Vbat.value()
-				% adc_3pi_Vbst()
-				% adc_IR1()
-				% adc_IR2()
-				% adc_IR3();
-	
+				% adc_Vbat.value();
+ 			send(debug, "\n");
+
+			send_avakar_packet(bt_uart, 10, adc_Vbat.value());
+			
+			// leds test - rounding light - doesn't work
+// 			leds[get_led_near_sensor(led_round)]->green.on();
+// 			leds[get_led_near_sensor(led_round-1)]->green.off();
+// 			led_round++;
+// 			led_round = led_round % 8;
+// 			format(debug, "%  => %  (% )\t\t")
+// 			% led_round
+// 			% get_led_near_sensor(led_round)
+// 			% get_led_near_sensor(led_round-1);
+
+			debug_sender.ack();
 		}
 
+		if(adc_Vbat.value() < Vbat_critical_low_voltage) {
+			if(Vbat_critical_value_activate == false) {
+				for (auto l: leds) {	
+					l->green.on();
+					l->red.on();
+				}
+				Vbat_critical_value_activate = true;
+			}
+		} else {
+			if (Vbat_critical_value_activate == true) {
+				for (auto l: leds) {
+					l->green.off();
+					l->red.off();
+				}
+				Vbat_critical_value_activate = false;
+			}
+		}
+
+		if (pin_PWR_BTN.read())
+		{
+			wait(msec(50));
+			if (pin_PWR_BTN.read())
+			{
+				shutdown();
+			}
+		}
+
+		time_cnt++;
 		process();
 	}
 }

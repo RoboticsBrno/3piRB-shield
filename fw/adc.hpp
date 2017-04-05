@@ -45,13 +45,14 @@ class adc_t
 			--s_max_index;
 		}
 	}
-
+	
 	adc_value_type value() const { return m_value; } 
 	adc_value_type operator ()() const { return m_value; }
 
 	adc_pin_type pin() { return m_adc_pin; }
 	uint8_t index() { return m_index; }
 	uint8_t max_index() { return s_max_index; }
+
 	protected:
 	adc_pin_type m_adc_pin;
 	adc_value_type m_value;
