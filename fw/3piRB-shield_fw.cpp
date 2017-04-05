@@ -310,7 +310,7 @@ int main(void)
 
 				// set period of leds by value from adc - doesn't work
 				leds[sensor_to_led(i)]->green.blink(msec(adc_IR[i]->value()/128));
-				//send_avakar_packet(bt_uart, i, adc_IR[i]->value());
+				send_avakar_packet(bt_uart, i, adc_IR[i]->value());
 				
 			}
 			format(debug, "I: % \t Iref: % \t Vbat: % ")
@@ -319,7 +319,7 @@ int main(void)
 				% adc_Vbat.value();
  			send(debug, "\n");
 
-			//send_avakar_packet(bt_uart, 10, adc_Vbat.value());
+			send_avakar_packet(bt_uart, 10, adc_Vbat.value());
 			
 			// leds test - rounding light - doesn't work
 // 			leds[get_led_near_sensor(led_round)]->green.on();
