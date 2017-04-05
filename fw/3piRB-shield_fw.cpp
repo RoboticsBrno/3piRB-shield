@@ -255,7 +255,7 @@ int main(void)
 	char ch = 0;
 	uint16_t time_cnt = 0;
 
-	timeout debug_sender(msec(100000));
+	timeout debug_sender(msec(10000));
 
 	while(pin_PWR_BTN.read()) {
 		process();
@@ -283,6 +283,23 @@ int main(void)
 			}
 		}
 
+		if(!bt_uart.empty())
+		{
+			ch = bt_uart.read();
+			switch(ch)
+			{
+			case '\r':
+				bt_uart.write('\n');
+				break;
+			case 's':
+			case 'S':
+				shutdown();
+			break;
+			default:
+				bt_uart.write(ch);
+			}
+		}
+
 		if(debug_sender()) 
  		{
 			// IR sensors debug
@@ -293,7 +310,7 @@ int main(void)
 
 				// set period of leds by value from adc - doesn't work
 				leds[sensor_to_led(i)]->green.blink(msec(adc_IR[i]->value()/128));
-				send_avakar_packet(bt_uart, i, adc_IR[i]->value());
+				//send_avakar_packet(bt_uart, i, adc_IR[i]->value());
 				
 			}
 			format(debug, "I: % \t Iref: % \t Vbat: % ")
@@ -302,7 +319,7 @@ int main(void)
 				% adc_Vbat.value();
  			send(debug, "\n");
 
-			send_avakar_packet(bt_uart, 10, adc_Vbat.value());
+			//send_avakar_packet(bt_uart, 10, adc_Vbat.value());
 			
 			// leds test - rounding light - doesn't work
 // 			leds[get_led_near_sensor(led_round)]->green.on();
@@ -317,6 +334,7 @@ int main(void)
 			debug_sender.ack();
 		}
 
+		// check battery voltage
 		if(adc_Vbat.value() < Vbat_critical_low_voltage) {
 			if(Vbat_critical_value_activate == false) {
 				for (auto l: leds) {	
@@ -324,6 +342,10 @@ int main(void)
 					l->red.on();
 				}
 				Vbat_critical_value_activate = true;
+			}
+			if (adc_Vbat.value() < Vbat_destruction_low_voltage)
+			{
+				//shutdown(); // TODO
 			}
 		} else {
 			if (Vbat_critical_value_activate == true) {
