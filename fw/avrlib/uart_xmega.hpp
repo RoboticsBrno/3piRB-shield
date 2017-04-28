@@ -25,7 +25,7 @@ enum uart_parity_t
 };
 
 #ifndef AVRLIB_USART_XMEGA_DEFAULT_INTERRUPT_PRIORITY
-#define AVRLIB_USART_XMEGA_DEFAULT_INTERRUPT_PRIORITY c_default_interrupt_priority
+#define AVRLIB_USART_XMEGA_DEFAULT_INTERRUPT_PRIORITY avrlib::uart_intr_med
 #endif
 
 class uart_xmega

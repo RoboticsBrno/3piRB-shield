@@ -179,8 +179,8 @@ int main(void)
 	
 	init_serial_number();
 	
-	debug.usart().open(USARTD0, calc_baudrate(DEBUG_UART_BAUDRATE, F_CPU), true);
-	bt_uart.usart().open(USARTF0, calc_baudrate(BT_UART_BAUDRATE, F_CPU), true);
+	debug.usart().open(USARTD0, calc_baudrate(DEBUG_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
+	bt_uart.usart().open(USARTF0, calc_baudrate(BT_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
 	_delay_ms(1);
 
 	print_device_info(debug);
@@ -256,6 +256,7 @@ int main(void)
 	uint16_t time_cnt = 0;
 
 	timeout debug_sender(msec(10000));
+	debug_sender.cancel();
 
 	while(pin_PWR_BTN.read()) {
 		process();
@@ -264,8 +265,27 @@ int main(void)
 	uint16_t led_round = 0;
 	bool Vbat_critical_value_activate = false;
 
+	timeout tt1(msec( 500));
+	timeout tt2(msec(1000));
+	timeout tt3(msec(333));
+
 	for(;;)
 	{
+		if(tt1)
+		{
+			tt1.ack();
+			leds[5]->green.toggle();
+		}
+		if(tt2)
+		{
+			tt2.ack();
+			leds[6]->green.toggle();
+		}
+		if(tt3)
+		{
+			tt3.ack();
+			leds[7]->green.toggle();
+		}
 		if(!debug.empty())
 		{
 			ch = debug.read();

@@ -15,11 +15,11 @@
 #else
 
 /***** VALUES *****/
-const BUILD_INFO::build_number_type BUILD_INFO::build_number				PROGMEM = 153;
-const BUILD_INFO::build_time_type   BUILD_INFO::build_time					PROGMEM = 1491365246;
-const char                          BUILD_INFO::build_time_str			[] PROGMEM = "05.04.2017 06:07:26";
-const char                          BUILD_INFO::build_config			[] PROGMEM = "Debug";
-const char                          BUILD_INFO::build_author			[] PROGMEM = "noname";
+const BUILD_INFO::build_number_type BUILD_INFO::build_number				PROGMEM = 171;
+const BUILD_INFO::build_time_type   BUILD_INFO::build_time					PROGMEM = 1493396975;
+const char                          BUILD_INFO::build_time_str			[] PROGMEM = "28.04.2017 18:29:35";
+const char                          BUILD_INFO::build_config			[] PROGMEM = "Release";
+const char                          BUILD_INFO::build_author			[] PROGMEM = "kubas";
 
 
 #endif
