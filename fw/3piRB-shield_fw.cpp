@@ -258,7 +258,7 @@ int main(void)
 	timeout debug_sender(msec(10000));
 	debug_sender.cancel();
 
-	while(pin_PWR_BTN.read()) {
+	while(pin_btn_pwr.read()) {
 		process();
 	}
 
@@ -376,10 +376,10 @@ int main(void)
 			}
 		}
 
-		if (pin_PWR_BTN.read())
+		if (pin_btn_pwr.read())
 		{
 			wait(msec(50));
-			if (pin_PWR_BTN.read())
+			if (pin_btn_pwr.read())
 			{
 				shutdown();
 			}
