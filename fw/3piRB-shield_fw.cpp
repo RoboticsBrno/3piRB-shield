@@ -38,10 +38,10 @@ typedef avrlib::async_usart<avrlib::uart_xmega, BT_UART_RX_BUFF_SIZE, BT_UART_TX
 bt_uart_t bt_uart;
 ISR(USARTF0_RXC_vect) { bt_uart.intr_rx(); }
 
-uint16_t Vbat_destruction_low_voltage = 2140; // 2140 = cca. 3,2 V
-uint16_t Vbat_critical_low_voltage = 2300; // 2300 = cca. 3,3 V
-uint16_t Vbat_standard_voltage = 2530; // 2530 = 3,7 v
-uint16_t Vbat_max_voltage = 2840; // 2840 = 4,2 v
+const int16_t Vbat_destruction_low_voltage = 2140; // 2140 = cca. 3,2 V
+const int16_t Vbat_critical_low_voltage = 2300; // 2300 = cca. 3,3 V
+const int16_t Vbat_standard_voltage = 2530; // 2530 = 3,7 v
+const int16_t Vbat_max_voltage = 2840; // 2840 = 4,2 v
 void process();
 
 #include "adc.hpp"
@@ -262,7 +262,6 @@ int main(void)
 		process();
 	}
 
-	uint16_t led_round = 0;
 	bool Vbat_critical_value_activate = false;
 
 	timeout tt1(msec( 500));

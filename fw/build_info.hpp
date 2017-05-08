@@ -15,9 +15,9 @@
 #else
 
 /***** VALUES *****/
-const BUILD_INFO::build_number_type BUILD_INFO::build_number				PROGMEM = 171;
-const BUILD_INFO::build_time_type   BUILD_INFO::build_time					PROGMEM = 1493396975;
-const char                          BUILD_INFO::build_time_str			[] PROGMEM = "28.04.2017 18:29:35";
+const BUILD_INFO::build_number_type BUILD_INFO::build_number				PROGMEM = 175;
+const BUILD_INFO::build_time_type   BUILD_INFO::build_time					PROGMEM = 1494236314;
+const char                          BUILD_INFO::build_time_str			[] PROGMEM = "08.05.2017 11:38:34";
 const char                          BUILD_INFO::build_config			[] PROGMEM = "Release";
 const char                          BUILD_INFO::build_author			[] PROGMEM = "kubas";
 
