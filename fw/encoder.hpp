@@ -264,29 +264,5 @@ public:
 	const EVSYS_DIGFILT_t c_input_filter;
 };
 
-/*
-encoder_t encoder_1(TCC1, pin_t(pin_enc_1a::PORT(), pin_enc_1a::bp), 0);
-encoder_t encoder_2(TCD1, pin_t(pin_enc_2a::PORT(), pin_enc_2a::bp), 3);
-encoder_t encoder_3(TCE1, pin_t(pin_enc_1b::PORT(), pin_enc_1b::bp), 1);
-encoder_t encoder_4(TCF1, pin_t(pin_enc_2b::PORT(), pin_enc_2b::bp), 2); // used as encoder for stepper motor: only event channels 0, 1 and 2 can trigger interrupt!
-
-ISR(TCC1_OVF_vect) { encoder_1.process_intr(); }
-ISR(TCD1_OVF_vect) { encoder_2.process_intr(); }
-ISR(TCE1_OVF_vect) { encoder_3.process_intr(); }
-ISR(TCF1_OVF_vect) { encoder_4.process_intr(); }
-
-ISR(TCC1_CCA_vect) { encoder_1.comparator_a.process_intr(); }
-ISR(TCD1_CCA_vect) { encoder_2.comparator_a.process_intr(); }
-ISR(TCE1_CCA_vect) { encoder_3.comparator_a.process_intr(); }
-ISR(TCF1_CCA_vect) { encoder_4.comparator_a.process_intr(); }
-
-ISR(TCC1_CCB_vect) { encoder_1.comparator_b.process_intr(); }
-ISR(TCD1_CCB_vect) { encoder_2.comparator_b.process_intr(); }
-ISR(TCE1_CCB_vect) { encoder_3.comparator_b.process_intr(); }
-ISR(TCF1_CCB_vect) { encoder_4.comparator_b.process_intr(); }
-	
-const uint8_t encoder_count = 4;
-encoder_t* const encoders[encoder_count] = { &encoder_1, &encoder_2, &encoder_3, &encoder_4 };
-*/
 
 #endif // ENCODER_HPP_

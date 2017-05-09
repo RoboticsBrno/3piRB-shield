@@ -55,7 +55,9 @@ void process();
 #include "new.hpp"
 #include "lambda_storage.hpp"
 #include "led.hpp"
+#include "spi.hpp"
 #include "encoder.hpp"
+#include "encoder_spi.hpp"
 #include "regulator.hpp"
 #include "button.hpp"
 
@@ -69,7 +71,7 @@ void print_device_info(Serial& serial, const bool& with_reset = true)
 	serial.flush();
 }
 
-//avrlib::timed_command_parser<base_timer_type> debug_data(base_timer, msec(100));
+avrlib::timed_command_parser<base_timer_type> packet(base_timer, msec(100));
 
 /*
 timeout emergency_shutdown_timeout(msec(500));
@@ -95,6 +97,18 @@ ISR(PORTD_INT0_vect)
 	stop_btn.process_intr();
 }
 */
+
+encoder_t encoder_left(TCE1, pin_enc_left_a , 0);
+encoder_t encoder_right(TCD1, pin_enc_right_a, 2);
+
+ISR(TCE1_OVF_vect) { encoder_left.process_intr(); }
+ISR(TCD1_OVF_vect) { encoder_right.process_intr(); }
+
+SPI::Interface spie(SPIE);
+ISR(SPIE_INT_vect) { spie.process_intr(); }
+
+encoder_spi_t encoder_ctrl_left(spie, pin_enc_left_cs);
+encoder_spi_t encoder_ctrl_right(spie, pin_enc_right_cs);
 
 void process()
 {
@@ -132,10 +146,14 @@ void process()
 			led_index = 0;
 		}
 	}
+
+	adc_t::process_all();
+	
+	//encoder_ctrl_left.process();
+	//encoder_ctrl_right.process();
 	
 	bt_uart.process_tx();
 	debug.process_tx();
-	adc_t::process_all();
 }
 
 template<typename Serial, typename T>
@@ -165,10 +183,8 @@ void shutdown()
 
 template <typename Stream>
 void send_avakar_packet(Stream & s, uint8_t id, int16_t value) {
-	s.write(0x80);
-	s.write(id << 4 | 2);
-	s.write(value & 0xFF);
-	s.write(value >> 8);
+	packet.write(value);
+	packet.send(s, id);
 	s.flush();
 }
 
@@ -196,6 +212,12 @@ int main(void)
 	sei();
 	
 	run_leds();
+
+	spie.open();
+
+	encoder_left.mode_quadrature();
+	encoder_right.mode_quadrature();
+	encoder_right.make_inverted();
 
 	debug.flush();
 
@@ -244,9 +266,9 @@ int main(void)
 	
 	format(debug, "adc_Vbat.pin(): %  - max_index: % \n") % adc_Vbat.pin() % adc_Vbat.max_index();
 	
-	pin_AREF_EN.make_high();
-	pin_IR_front.make_high();
-	pin_IR_back_left_right.make_high();
+	pin_AREF_EN.set_high();
+	pin_IR_front.set_high();
+	pin_IR_back_left_right.set_high();
 	
 	// interrupt stop btn
 	//stop_btn.pin().port.INTFLAGS = PORT_INT0IF_bm | PORT_INT1IF_bm;
@@ -255,8 +277,8 @@ int main(void)
 	char ch = 0;
 	uint16_t time_cnt = 0;
 
-	timeout debug_sender(msec(10000));
-	debug_sender.cancel();
+	timeout debug_sender(msec(200));
+	//debug_sender.cancel();
 
 	while(pin_btn_pwr.read()) {
 		process();
@@ -313,13 +335,40 @@ int main(void)
 			case 's':
 			case 'S':
 				shutdown();
-			break;
+				break;
 			default:
 				bt_uart.write(ch);
 			}
 		}
 
-		if(debug_sender()) 
+		if (encoder_ctrl_right.is_updated())
+		{
+			format_spgm(debug, PSTR("l: a %4 m %4 g %3 l %1 h %1 o %1 e %1 p %1 c %1 f %1 i %9\tr: a %4 m %4 g %3 l %1 h %1 o %1 e %1 p %1 c %1 f %1 i %9\n"))
+				% encoder_ctrl_left.angle()
+				% encoder_ctrl_left.magnitude()
+				% encoder_ctrl_left.agc()
+				% encoder_ctrl_left.alarm_lo()
+				% encoder_ctrl_left.alarm_hi()
+				% encoder_ctrl_left.cordic_overflow()
+				% encoder_ctrl_left.error()
+				% encoder_ctrl_left.parity_error()
+				% encoder_ctrl_left.command_error()
+				% encoder_ctrl_left.framing_error()
+				% encoder_left.value()
+				% encoder_ctrl_right.angle()
+				% encoder_ctrl_right.magnitude()
+				% encoder_ctrl_right.agc()
+				% encoder_ctrl_right.alarm_lo()
+				% encoder_ctrl_right.alarm_hi()
+				% encoder_ctrl_right.cordic_overflow()
+				% encoder_ctrl_right.error()
+				% encoder_ctrl_right.parity_error()
+				% encoder_ctrl_right.command_error()
+				% encoder_ctrl_right.framing_error()
+				% encoder_right.value();
+		}
+
+		if(debug_sender) 
  		{
 			// IR sensors debug
 			format(debug, "%5 - ") % time_cnt;
@@ -336,9 +385,18 @@ int main(void)
 				% adc_I.value()
 				% adc_Iref.value()
 				% adc_Vbat.value();
+
+			format(debug, "encL: %9; encR: %9")
+				% encoder_left.value()
+				% encoder_right.value();
+
  			send(debug, "\n");
 
 			send_avakar_packet(bt_uart, 10, adc_Vbat.value());
+			
+			packet.write(encoder_left.value());
+			packet.write(encoder_right.value());
+			packet.send(bt_uart, 11);
 			
 			// leds test - rounding light - doesn't work
 // 			leds[get_led_near_sensor(led_round)]->green.on();

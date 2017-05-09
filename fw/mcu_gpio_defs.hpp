@@ -109,6 +109,7 @@ pin_t pin_enc_left_cs(PORTJ, 6);
 pin_t pin_enc_right_a(PORTD, 4);
 pin_t pin_enc_right_b(PORTD, 5);
 pin_t pin_enc_right_cs(PORTJ, 7);
+	// TCE1, TCD1
 
 // IMU
 pin_t pin_imu_int(PORTH, 3);
@@ -130,6 +131,7 @@ pin_t pin_AREF_EN(PORTJ, 5);
 
 pin_t pin_IR_front(PORTC, 5);
 pin_t pin_IR_back_left_right(PORTC, 4);
+	// TCC0 + TCC1
 
 pin_t pin_SHDN(PORTJ, 0);
 
@@ -223,7 +225,7 @@ void init_mcu_gpio()
 
 	pin_imu_int.pullup();
 	pin_imu_int.make_inverted();
-	pin_imu_cs.make_inverted();
+	// pin_imu_cs.make_inverted(); // because of short
 	pin_imu_cs.make_low();
 
 	pin_SDA.make_input();
@@ -246,6 +248,7 @@ void init_mcu_gpio()
 
 	pin_bat_chg_en.make_low();
 	pin_stepup_disable.make_low();
+	pin_arm_bt_uart_en.make_inverted();
 	pin_arm_bt_uart_en.make_low();
 	pin_disp_backlight_en.make_low();
 
