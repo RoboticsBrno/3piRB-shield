@@ -258,6 +258,9 @@ int main(void)
 		&adc_IR9
 	};
 
+	adc_t::adc_value_type adc_last_values[ADC_IR_COUNT] = {0};
+	adc_t::adc_value_type adc_IR_threshold = 30;
+
 	adc_t adc_I(11);
 	adc_t adc_Iref(12);
 	adc_t adc_Vbat(13);
@@ -292,21 +295,21 @@ int main(void)
 
 	for(;;)
 	{
-		if(tt1)
-		{
-			tt1.ack();
-			leds[5]->green.toggle();
-		}
-		if(tt2)
-		{
-			tt2.ack();
-			leds[6]->green.toggle();
-		}
-		if(tt3)
-		{
-			tt3.ack();
-			leds[7]->green.toggle();
-		}
+// 		if(tt1)
+// 		{
+// 			tt1.ack();
+// 			leds[5]->green.toggle();
+// 		}
+// 		if(tt2)
+// 		{
+// 			tt2.ack();
+// 			leds[6]->green.toggle();
+// 		}
+// 		if(tt3)
+// 		{
+// 			tt3.ack();
+// 			leds[7]->green.toggle();
+// 		}
 		if(!debug.empty())
 		{
 			ch = debug.read();
@@ -377,7 +380,11 @@ int main(void)
 				format(debug, "% : %4 \t") % i % adc_IR[i]->value();
 
 				// set period of leds by value from adc - doesn't work
-				leds[sensor_to_led(i)]->green.blink(msec(adc_IR[i]->value()/128));
+				if(abs(adc_last_values[i] - adc_IR[i]->value()) > adc_IR_threshold)
+				{
+					adc_last_values[i] = adc_IR[i]->value();
+					leds[sensor_to_led(i)]->green.blink(msec(adc_IR[i]->value()/128));
+				}
 				send_avakar_packet(bt_uart, i, adc_IR[i]->value());
 				
 			}
@@ -414,7 +421,7 @@ int main(void)
 		// check battery voltage
 		if(adc_Vbat.value() < Vbat_critical_low_voltage) {
 			if(Vbat_critical_value_activate == false) {
-				for (auto l: leds) {	
+				for (auto l: leds) {
 					l->green.on();
 					l->red.on();
 				}
@@ -426,10 +433,10 @@ int main(void)
 			}
 		} else {
 			if (Vbat_critical_value_activate == true) {
-				for (auto l: leds) {
-					l->green.off();
-					l->red.off();
-				}
+// 				for (auto l: leds) {
+// 					l->green.off();
+// 					l->red.off();
+// 				}
 				Vbat_critical_value_activate = false;
 			}
 		}
