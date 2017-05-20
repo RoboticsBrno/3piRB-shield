@@ -179,6 +179,7 @@ void shutdown()
 	process();
 
 	pin_SHDN.set_high();
+	for(;;);
 }
 
 template <typename Stream>
@@ -230,7 +231,7 @@ int main(void)
 	}
 
 	//leds[get_led_near_sensor(9)]->green.blink(msec(500));
-	leds[sensor_to_led(9)]->green.on();
+	//leds[sensor_to_led(9)]->green.on();
 
 	// adc init
 	adc_t::init();
@@ -239,11 +240,11 @@ int main(void)
 	adc_t adc_IR2(2);
 	adc_t adc_IR3(3);
 	adc_t adc_IR4(4);
-	adc_t adc_IR5(5);
-	adc_t adc_IR6(6);
+	adc_t adc_IR5(9);
+	adc_t adc_IR6(8);
 	adc_t adc_IR7(7);
-	adc_t adc_IR8(8);
-	adc_t adc_IR9(9);
+	adc_t adc_IR8(5);
+	adc_t adc_IR9(6);
 
 	const uint8_t ADC_IR_COUNT = 9;
 	adc_t * adc_IR[ADC_IR_COUNT] = {
@@ -257,9 +258,6 @@ int main(void)
 		&adc_IR8,
 		&adc_IR9
 	};
-
-	adc_t::adc_value_type adc_last_values[ADC_IR_COUNT] = {0};
-	adc_t::adc_value_type adc_IR_threshold = 30;
 
 	adc_t adc_I(11);
 	adc_t adc_Iref(12);
@@ -281,35 +279,25 @@ int main(void)
 	uint16_t time_cnt = 0;
 
 	timeout debug_sender(msec(200));
+
+	timeout blink_timeout(msec(1000));
+	const auto blink_period = (blink_timeout.get_timeout() * 14) >> 4;
 	//debug_sender.cancel();
 
 	while(pin_btn_pwr.read()) {
 		process();
 	}
 
-	bool Vbat_critical_value_activate = false;
+	while(!adc_Vbat.new_value()) {
+		process();
+	}
 
-	timeout tt1(msec( 500));
-	timeout tt2(msec(1000));
-	timeout tt3(msec(333));
+	send(debug, "main loop\n");
+
+	bool Vbat_critical_value_activate = false;
 
 	for(;;)
 	{
-// 		if(tt1)
-// 		{
-// 			tt1.ack();
-// 			leds[5]->green.toggle();
-// 		}
-// 		if(tt2)
-// 		{
-// 			tt2.ack();
-// 			leds[6]->green.toggle();
-// 		}
-// 		if(tt3)
-// 		{
-// 			tt3.ack();
-// 			leds[7]->green.toggle();
-// 		}
 		if(!debug.empty())
 		{
 			ch = debug.read();
@@ -371,29 +359,30 @@ int main(void)
 				% encoder_right.value();
 		}
 
+		if (blink_timeout)
+		{
+			blink_timeout.ack();
+			for(int i = 0; i < ADC_IR_COUNT; i++)
+				leds[sensor_to_led(i)]->green.blink(blink_period, msec(-to_msec(blink_period) + ((4096 - (adc_IR[i]->value())) >> 0)), 1);
+		}
+
 		if(debug_sender) 
  		{
 			// IR sensors debug
 			format(debug, "%5 - ") % time_cnt;
+			time_cnt = 0;
 			for(int i = 0; i < ADC_IR_COUNT; i++)
-			{
-				format(debug, "% : %4 \t") % i % adc_IR[i]->value();
-
-				// set period of leds by value from adc - doesn't work
-				if(abs(adc_last_values[i] - adc_IR[i]->value()) > adc_IR_threshold)
-				{
-					adc_last_values[i] = adc_IR[i]->value();
-					leds[sensor_to_led(i)]->green.blink(msec(adc_IR[i]->value()/128));
-				}
+			{	
 				send_avakar_packet(bt_uart, i, adc_IR[i]->value());
+				format(debug, "% : %4 \t") % i % adc_IR[i]->value();
 				
 			}
-			format(debug, "I: % \t Iref: % \t Vbat: % ")
+			format(debug, "I: %4 \t Iref: %4 \t Vbat: %4 ")
 				% adc_I.value()
 				% adc_Iref.value()
 				% adc_Vbat.value();
 
-			format(debug, "encL: %9; encR: %9")
+			format(debug, "\t encL: %9; encR: %9")
 				% encoder_left.value()
 				% encoder_right.value();
 
@@ -404,16 +393,6 @@ int main(void)
 			packet.write(encoder_left.value());
 			packet.write(encoder_right.value());
 			packet.send(bt_uart, 11);
-			
-			// leds test - rounding light - doesn't work
-// 			leds[get_led_near_sensor(led_round)]->green.on();
-// 			leds[get_led_near_sensor(led_round-1)]->green.off();
-// 			led_round++;
-// 			led_round = led_round % 8;
-// 			format(debug, "%  => %  (% )\t\t")
-// 			% led_round
-// 			% get_led_near_sensor(led_round)
-// 			% get_led_near_sensor(led_round-1);
 
 			debug_sender.ack();
 		}
@@ -429,14 +408,14 @@ int main(void)
 			}
 			if (adc_Vbat.value() < Vbat_destruction_low_voltage)
 			{
-				//shutdown(); // TODO
+				shutdown();
 			}
 		} else {
 			if (Vbat_critical_value_activate == true) {
-// 				for (auto l: leds) {
-// 					l->green.off();
-// 					l->red.off();
-// 				}
+				for (auto l: leds) {
+					l->green.off();
+					l->red.off();
+				}
 				Vbat_critical_value_activate = false;
 			}
 		}

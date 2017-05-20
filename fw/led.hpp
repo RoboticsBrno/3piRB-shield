@@ -15,14 +15,17 @@ namespace detail
 	
 typedef timeout::time_type led_time_type;
 
+const led_time_type led_process_period = msec(10);
+
 class led_impl_t
 {
 public:
 	typedef led_time_type time_type;
+	typedef int32_t diff_type;
 	typedef uint8_t count_type;
 
 	led_impl_t()
-		:m_timer(0), m_on_time(0), m_off_time(0), m_stop_counter(0), m_state(0), m_value(false)
+		:m_timer(0), m_on_time(0), m_off_time(0), m_stop_counter(0), m_state(0), m_blink_state(false), m_value(false)
 	{
 		m_timer.cancel();
 	}
@@ -45,14 +48,22 @@ public:
 		else
 			clear();
 	}
-	void blink(const time_type& period, const time_type& difference = 0, const count_type& count = 0)
+	void blink(time_type period, diff_type difference = 0, const count_type& count = 0)
 	{
-		m_on_time = (period>>1) + difference;
-		m_off_time = (period>>1) - difference;
+		period >>= 1;
+		if (period < led_process_period)
+			period = led_process_period;
+		difference >>= 1;
+		if ((diff_type(period) - avrlib::abs(difference)) < diff_type(led_process_period))
+			difference = (difference < 0) ? (-diff_type(period) + led_process_period) : (period - led_process_period);
+		m_on_time = period + difference;
+		m_off_time = period - difference;
 		m_stop_counter = count;
 		m_timer.set_timeout(m_on_time);
+		if (blinking())
+			return;
 		m_timer.restart();
-		//set();
+		m_blink_state = true;
 		toggle();
 	}
 	void on()
@@ -78,31 +89,29 @@ public:
 			case 2: _clear(); m_state = 0; break;
 			case 3: _toggle(); m_state = 0; break;
 		}
-		if(m_timer.running() && m_timer)
+		if(m_timer)
 		{
-			if(m_off_time == 0) // last blink ends
+			m_timer.ack();
+			_toggle();
+			m_timer.set_timeout(m_blink_state ? m_off_time : m_on_time);
+			if(m_on_time == 0) // last blink ends
 			{
-				//_clear();
+				m_timer.cancel();
 				_toggle();
-				m_timer.stop();
 			}
 			else
 			{
-				if(get()) // dark half-period starts
+				if (m_blink_state)
 				{
-					//_clear();
-					_toggle();
-					m_timer.ack();
-					m_timer.set_timeout(m_off_time);
-					if(m_stop_counter != 0 && --m_stop_counter == 0) // stop after next tiemout
-						m_off_time = 0;
+					if (--m_stop_counter == 0)
+					{
+						m_on_time = 0;
+					}
+					m_blink_state = false;
 				}
-				else // light half-period start
+				else
 				{
-				//	_set();
-					_toggle();
-					m_timer.ack();
-					m_timer.set_timeout(m_on_time);
+					m_blink_state = true;
 				}
 			}
 		}
@@ -118,10 +127,9 @@ private:
 	time_type m_off_time;
 	count_type m_stop_counter;
 	uint8_t m_state;
+	bool m_blink_state;
 	bool m_value;
 };
-
-const led_time_type led_process_period = msec(10);
 
 } // namespace detail
 

@@ -19,7 +19,7 @@ class adc_t
 	typedef int16_t adc_value_type;
 
 	adc_t(const adc_pin_type adc_pin)
-	:m_adc_pin(adc_pin), m_value(-1), m_index(s_max_index < MAX_ADC_PINS_COUNT ? s_max_index : -1)
+	:m_adc_pin(adc_pin), m_value(-1), m_updated(false), m_index(s_max_index < MAX_ADC_PINS_COUNT ? s_max_index : -1)
 	{
 		if(s_max_index < MAX_ADC_PINS_COUNT)
 			s_adcs[s_max_index] = this;
@@ -46,8 +46,14 @@ class adc_t
 		}
 	}
 	
-	adc_value_type value() const { return m_value; } 
-	adc_value_type operator ()() const { return m_value; }
+	adc_value_type value()
+	{
+		m_updated = false;
+		return m_value;
+	} 
+	adc_value_type operator ()() { return value(); }
+
+	bool new_value() const { return m_updated; }
 
 	adc_pin_type pin() { return m_adc_pin; }
 	uint8_t index() { return m_index; }
@@ -56,6 +62,7 @@ class adc_t
 	protected:
 	adc_pin_type m_adc_pin;
 	adc_value_type m_value;
+	bool m_updated;
 	uint8_t m_index;
 	
 	// static
@@ -80,6 +87,7 @@ class adc_t
 				ADCA.CH0.INTFLAGS = ADC_CH_CHIF_bm;
 				
 				s_adcs[s_act_index]->m_value = ADCA.CH0RES;
+				s_adcs[s_act_index]->m_updated = true;
 
 				if(++s_act_index == s_max_index)
 					s_act_index = 0;

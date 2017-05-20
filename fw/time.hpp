@@ -59,20 +59,20 @@ void wait(base_timer_type::time_type time, Process process)
 }
 
 template <typename Process>
-void wait(base_timer_type::time_type time, Process process, int)
+auto wait(base_timer_type::time_type time, Process process, int)
 {
-	avrlib::wait(base_timer, time, process, 0);
+	return avrlib::wait(base_timer, time, process, 0);
 }
 
-#define tick_per_usec (F_CPU / 1000000 / 2)
+#define tick_per_usec (F_CPU / 1000000L / 2)
 
-#define usec(value) (value * tick_per_usec)
-#define msec(value) (value * tick_per_usec * 1000UL)
-#define  sec(value) (value * tick_per_usec * 1000000UL)
+#define usec(value) ((value) * tick_per_usec)
+#define msec(value) ((value) * tick_per_usec * 1000L)
+#define  sec(value) ((value) * tick_per_usec * 1000000L)
 
-#define to_usec(value) (value /  tick_per_usec)
-#define to_msec(value) (value / (tick_per_usec * 1000UL))
-#define to_sec (value) (value / (tick_per_usec * 1000000UL))
+#define to_usec(value) ((value) /  tick_per_usec)
+#define to_msec(value) ((value) / (tick_per_usec * 1000L))
+#define to_sec (value) ((value) / (tick_per_usec * 1000000L))
 
 
 #endif /* TIME_HPP_ */
