@@ -38,10 +38,6 @@ typedef avrlib::async_usart<avrlib::uart_xmega, BT_UART_RX_BUFF_SIZE, BT_UART_TX
 bt_uart_t bt_uart;
 ISR(USARTF0_RXC_vect) { bt_uart.intr_rx(); }
 
-const int16_t Vbat_destruction_low_voltage = 2140; // 2140 = cca. 3,2 V
-const int16_t Vbat_critical_low_voltage = 2300; // 2300 = cca. 3,3 V
-const int16_t Vbat_standard_voltage = 2530; // 2530 = 3,7 v
-const int16_t Vbat_max_voltage = 2840; // 2840 = 4,2 v
 void process();
 
 #include "adc.hpp"
@@ -49,6 +45,7 @@ void process();
 #include "miscellaneous.hpp"
 #include "serial_number.hpp"
 #include "reset.hpp"
+#include "eeprom.hpp"
 #include "clock.hpp"
 #include "time.hpp"
 #include "baudrate.hpp"
@@ -60,6 +57,14 @@ void process();
 #include "encoder_spi.hpp"
 #include "regulator.hpp"
 #include "button.hpp"
+#include "ir_sensor.hpp"
+
+const int16_t Vbat_destruction_low_voltage = 2140; // 2140 = cca. 3,2 V
+const int16_t Vbat_critical_low_voltage = 2300; // 2300 = cca. 3,3 V
+const int16_t Vbat_standard_voltage = 2530; // 2530 = 3,7 v
+const int16_t Vbat_max_voltage = 2840; // 2840 = 4,2 v
+
+const eeprom::addr_type IR_calibration_addr = 0;
 
 template <typename Serial>
 void print_device_info(Serial& serial, const bool& with_reset = true)
@@ -189,6 +194,11 @@ void send_avakar_packet(Stream & s, uint8_t id, int16_t value) {
 	s.flush();
 }
 
+struct Sink {
+	void write(char){}
+	void flush(){}
+}; Sink sink;
+
 int main(void)
 {
 	init_mcu_gpio();
@@ -202,9 +212,7 @@ int main(void)
 
 	print_device_info(debug);
 	
-	// mapping eeprom
-	NVM.CTRLB = NVM_EEMAPEN_bm;
-	while((NVM.STATUS & NVM_NVMBUSY_bm) != 0){};
+	eeprom::init();
 	
 	init_time();
 	
@@ -233,31 +241,11 @@ int main(void)
 	//leds[get_led_near_sensor(9)]->green.blink(msec(500));
 	//leds[sensor_to_led(9)]->green.on();
 
+	pin_AREF_EN.set_high();
+	ir_sensor_t::on();
+
 	// adc init
 	adc_t::init();
-	
-	adc_t adc_IR1(1);
-	adc_t adc_IR2(2);
-	adc_t adc_IR3(3);
-	adc_t adc_IR4(4);
-	adc_t adc_IR5(9);
-	adc_t adc_IR6(8);
-	adc_t adc_IR7(7);
-	adc_t adc_IR8(5);
-	adc_t adc_IR9(6);
-
-	const uint8_t ADC_IR_COUNT = 9;
-	adc_t * adc_IR[ADC_IR_COUNT] = {
-		&adc_IR1,
-		&adc_IR2,
-		&adc_IR3,
-		&adc_IR4,
-		&adc_IR5,
-		&adc_IR6,
-		&adc_IR7,
-		&adc_IR8,
-		&adc_IR9
-	};
 
 	adc_t adc_I(11);
 	adc_t adc_Iref(12);
@@ -265,12 +253,36 @@ int main(void)
 	adc_t adc_3pi_Vbst(14);
 	adc_t adc_Bat_charg_stat(15);
 	
-	format(debug, "adc_Vbat.pin(): %  - max_index: % \n") % adc_Vbat.pin() % adc_Vbat.max_index();
+	ir_sensor_t IR1(1);
+	ir_sensor_t IR2(2);
+	ir_sensor_t IR3(3);
+	ir_sensor_t IR4(4);
+	ir_sensor_t IR5(9);
+	ir_sensor_t IR6(8);
+	ir_sensor_t IR7(7);
+	ir_sensor_t IR8(5);
+	ir_sensor_t IR9(6);
+
+	const uint8_t ADC_IR_COUNT = 9;
+	ir_sensor_t * IR[ADC_IR_COUNT] = {
+		&IR1,
+		&IR2,
+		&IR3,
+		&IR4,
+		&IR5,
+		&IR6,
+		&IR7,
+		&IR8,
+		&IR9
+	};
 	
-	pin_AREF_EN.set_high();
-	pin_IR_front.set_high();
-	pin_IR_back_left_right.set_high();
-	
+	eeprom::addr_type ir_calibration_addr = IR_calibration_addr;
+	for (auto s: IR)
+	{
+		s->load_calibration(ir_calibration_addr);
+		ir_calibration_addr += s->calibration_size();
+	}
+
 	// interrupt stop btn
 	//stop_btn.pin().port.INTFLAGS = PORT_INT0IF_bm | PORT_INT1IF_bm;
 	//stop_btn.pin().port.INTCTRL = PORT_INT0LVL_HI_gc;
@@ -327,6 +339,28 @@ int main(void)
 			case 'S':
 				shutdown();
 				break;
+			case 'c':
+				for(auto l: leds)
+				{
+					l->red.off();
+					l->green.off();
+				}
+				for (auto s: IR)
+					s->calibrate(process);
+				break;
+			case 'C':
+				ir_calibration_addr = IR_calibration_addr;
+				for (auto s: IR)
+				{
+					s->save_calibration(ir_calibration_addr);
+					ir_calibration_addr += s->calibration_size();
+				}
+				eeprom::flush();
+				break;
+			case 'p':
+				for (auto s: IR)
+					s->print_calibration(bt_uart);
+				break;
 			default:
 				bt_uart.write(ch);
 			}
@@ -363,36 +397,38 @@ int main(void)
 		{
 			blink_timeout.ack();
 			for(int i = 0; i < ADC_IR_COUNT; i++)
-				leds[sensor_to_led(i)]->green.blink(blink_period, msec(-to_msec(blink_period) + ((4096 - (adc_IR[i]->value())) >> 0)), 1);
+				leds[sensor_to_led(i)]->green.blink(blink_period, msec(-to_msec(blink_period) + (IR[i]->value() << 1)), 1);
 		}
 
 		if(debug_sender) 
  		{
+			auto& text_out = debug;
+			auto& bin_out = bt_uart;
 			// IR sensors debug
-			format(debug, "%5 - ") % time_cnt;
+			format(text_out, "%5 - ") % time_cnt;
 			time_cnt = 0;
 			for(int i = 0; i < ADC_IR_COUNT; i++)
 			{	
-				send_avakar_packet(bt_uart, i, adc_IR[i]->value());
-				format(debug, "% : %4 \t") % i % adc_IR[i]->value();
+				send_avakar_packet(bin_out, i+1, IR[i]->value());
+				format(text_out, "% : %4 \t") % (i+1) % IR[i]->value();
 				
 			}
-			format(debug, "I: %4 \t Iref: %4 \t Vbat: %4 ")
+			format(text_out, "I: %4 \t Iref: %4 \t Vbat: %4 ")
 				% adc_I.value()
 				% adc_Iref.value()
 				% adc_Vbat.value();
 
-			format(debug, "\t encL: %9; encR: %9")
+			format(text_out, "\t encL: %9; encR: %9")
 				% encoder_left.value()
 				% encoder_right.value();
 
- 			send(debug, "\n");
+ 			send(text_out, "\n");
 
-			send_avakar_packet(bt_uart, 10, adc_Vbat.value());
+			send_avakar_packet(bin_out, 10, adc_Vbat.value());
 			
 			packet.write(encoder_left.value());
 			packet.write(encoder_right.value());
-			packet.send(bt_uart, 11);
+			packet.send(bin_out, 11);
 
 			debug_sender.ack();
 		}
