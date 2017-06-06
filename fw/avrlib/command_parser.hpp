@@ -107,7 +107,7 @@ public:
 	uint8_t operator[](uint8_t index) const { return m_rx_buffer[index]; }
 		
 	template <typename T>
-	T read(const uint8_t& index) const { return *reinterpret_cast<T*>(m_tx_buffer + index); }
+	T read(const uint8_t& index) const { return *reinterpret_cast<const T*>(m_tx_buffer + index); }
 		
 	uint8_t* get_rx_buffer() { return m_rx_buffer; }
 	uint8_t* get_buffer() { return m_rx_buffer; }

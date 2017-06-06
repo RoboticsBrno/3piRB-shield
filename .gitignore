@@ -1,7 +1,14 @@
 # fw
 /fw/Debug/
-/fw/fw.componentinfo.xml
+/fw/Release/
+/fw/3piRB-shield_fw.componentinfo.componentinfo.xml
 /fw/.vs/
+
+# fw_3pi
+/fw_3pi/Debug/
+/fw_3pi/Release/
+/fw_3pi/3piRB-3pi_fw.componentinfo.xml
+/fw_3pi/.vs/
 
 
 # Compiled Object files

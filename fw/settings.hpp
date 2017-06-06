@@ -16,6 +16,7 @@
 #define F_CPU 32000000UL
 #endif
 
+
 // debug UART
 
 #ifndef DEBUG_UART_BAUDRATE
@@ -31,18 +32,30 @@
 #endif
 
 
-// debug_data UART
+// DATA UARTs
+
+#ifndef DATA_UART_RX_BUFF_SIZE
+#define DATA_UART_RX_BUFF_SIZE 128
+#endif
+
+#ifndef DATA_UART_TX_BUFF_SIZE
+#define DATA_UART_TX_BUFF_SIZE 128
+#endif
+
+// BT UART
 
 #ifndef BT_UART_BAUDRATE
 #define BT_UART_BAUDRATE 115200
 #endif
 
-#ifndef BT_UART_RX_BUFF_SIZE
-#define BT_UART_RX_BUFF_SIZE 16
+// 3pi UART
+
+#ifndef R3PI_UART_BAUDRATE
+#define R3PI_UART_BAUDRATE 115200
 #endif
 
-#ifndef BT_UART_TX_BUFF_SIZE
-#define BT_UART_TX_BUFF_SIZE 128
+#ifndef R3PI_UART_FAST_BAUDRATE
+#define R3PI_UART_FAST_BAUDRATE 1250000
 #endif
 
 

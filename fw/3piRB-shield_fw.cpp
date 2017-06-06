@@ -34,9 +34,26 @@ typedef avrlib::async_usart<avrlib::uart_xmega, DEBUG_UART_RX_BUFF_SIZE, DEBUG_U
 debug_t debug;
 ISR(USARTD0_RXC_vect) { debug.intr_rx(); }
 
-typedef avrlib::async_usart<avrlib::uart_xmega, BT_UART_RX_BUFF_SIZE, BT_UART_TX_BUFF_SIZE> bt_uart_t; // F0
-bt_uart_t bt_uart;
+typedef avrlib::async_usart<avrlib::uart_xmega, DATA_UART_RX_BUFF_SIZE, DATA_UART_TX_BUFF_SIZE> data_uart_t;
+
+data_uart_t bt_uart; // F0
 ISR(USARTF0_RXC_vect) { bt_uart.intr_rx(); }
+
+data_uart_t r3pi_uart; // E0
+ISR(USARTE0_RXC_vect) { r3pi_uart.intr_rx(); }
+
+data_uart_t sink; // D1
+ISR(USARTD1_DRE_vect)
+{
+	sink.tx_buffer().clear();
+	sink.intr_tx();
+}
+
+// struct Sink {
+// 	void write(char){}
+// 	void flush(){}
+// }; Sink sink;
+
 
 void process();
 
@@ -58,6 +75,7 @@ void process();
 #include "regulator.hpp"
 #include "button.hpp"
 #include "ir_sensor.hpp"
+#include "3pi.hpp"
 
 const int16_t Vbat_destruction_low_voltage = 2140; // 2140 = cca. 3,2 V
 const int16_t Vbat_critical_low_voltage = 2300; // 2300 = cca. 3,3 V
@@ -115,6 +133,12 @@ ISR(SPIE_INT_vect) { spie.process_intr(); }
 encoder_spi_t encoder_ctrl_left(spie, pin_enc_left_cs);
 encoder_spi_t encoder_ctrl_right(spie, pin_enc_right_cs);
 
+R3pi r3pi(pin_3pi_power,
+		  pin_3pi_reset,
+		  pin_disp_backlight_en,
+		  13,
+		  r3pi_uart);
+
 void process()
 {
 	static uint8_t led_index = 0;
@@ -157,7 +181,10 @@ void process()
 	//encoder_ctrl_left.process();
 	//encoder_ctrl_right.process();
 	
+	r3pi.process();
+
 	bt_uart.process_tx();
+	r3pi_uart.process_tx();
 	debug.process_tx();
 }
 
@@ -165,12 +192,12 @@ template<typename Serial, typename T>
 void dump_modul_settings(Serial& serial, const T& module, const char* msg = nullptr)
 {
 	if(msg != nullptr)
-	send(serial, msg);
+		send(serial, msg);
 	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(&module);
 	for(uint16_t i = 0; i != sizeof(T); ++i)
 	{
 		if(*ptr)
-		format(serial, "%x2: %x2\n") % i % *ptr;
+			format(serial, "%x2: %x2\n") % i % *ptr;
 		++ptr;
 	}
 }
@@ -194,11 +221,6 @@ void send_avakar_packet(Stream & s, uint8_t id, int16_t value) {
 	s.flush();
 }
 
-struct Sink {
-	void write(char){}
-	void flush(){}
-}; Sink sink;
-
 int main(void)
 {
 	init_mcu_gpio();
@@ -208,7 +230,12 @@ int main(void)
 	
 	debug.usart().open(USARTD0, calc_baudrate(DEBUG_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
 	bt_uart.usart().open(USARTF0, calc_baudrate(BT_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
+	r3pi_uart.usart().open(USARTE0, calc_baudrate(R3PI_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
 	_delay_ms(1);
+
+	sink.usart().open(USARTD1, 0, false);
+	sink.usart().close();
+	sink.async_tx(true);
 
 	print_device_info(debug);
 	
@@ -287,6 +314,8 @@ int main(void)
 	//stop_btn.pin().port.INTFLAGS = PORT_INT0IF_bm | PORT_INT1IF_bm;
 	//stop_btn.pin().port.INTCTRL = PORT_INT0LVL_HI_gc;
 	
+	r3pi.init();
+
 	char ch = 0;
 	uint16_t time_cnt = 0;
 
@@ -308,8 +337,39 @@ int main(void)
 
 	bool Vbat_critical_value_activate = false;
 
+	data_uart_t* bt_bridge = nullptr;
+
+	timeout square_timeout(msec(1000));
+	uint8_t square_state = 0;
+
 	for(;;)
 	{
+		if(square_timeout)
+		{
+			square_timeout.ack();
+			if (square_state == 0)
+			{
+				r3pi.set_motors_power(-20, 20);
+				square_timeout.set_timeout(msec(350));
+				square_state = 1;
+			}
+			else
+			{
+				r3pi.set_motors_power(20, 20);
+				square_timeout.set_timeout(msec(2000));
+				square_state = 0;
+			}
+		}
+		if(IR2.value() > 250 && square_timeout.running())
+		{
+			r3pi.stop();
+			square_timeout.cancel();
+		}
+		if(IR2.value() < 230 && !square_timeout.running())
+		{
+			square_timeout.restart();
+		}
+		
 		if(!debug.empty())
 		{
 			ch = debug.read();
@@ -322,6 +382,19 @@ int main(void)
 			case 'S':
 				shutdown();
 				break;
+			case 'b':
+				bt_bridge = r3pi.set_bridge(&bt_uart);
+				break;
+			case 'n':
+				r3pi.set_bridge(nullptr);
+				bt_bridge = nullptr;
+				break;
+			case 'p':
+				r3pi.buzzer().on();
+				break;
+			case 'l':
+				r3pi_uart.write(0xB3);
+				break;
 			default:
 				debug.write(ch);
 			}
@@ -330,39 +403,46 @@ int main(void)
 		if(!bt_uart.empty())
 		{
 			ch = bt_uart.read();
-			switch(ch)
+			if (bt_bridge != nullptr)
 			{
-			case '\r':
-				bt_uart.write('\n');
-				break;
-			case 's':
-			case 'S':
-				shutdown();
-				break;
-			case 'c':
-				for(auto l: leds)
+				bt_bridge->write(ch);
+			}
+			else
+			{
+				switch(ch)
 				{
-					l->red.off();
-					l->green.off();
+				case '\r':
+					bt_uart.write('\n');
+					break;
+				case 's':
+				case 'S':
+					shutdown();
+					break;
+				case 'c':
+					for(auto l: leds)
+					{
+						l->red.off();
+						l->green.off();
+					}
+					for (auto s: IR)
+						s->calibrate(process);
+					break;
+				case 'C':
+					ir_calibration_addr = IR_calibration_addr;
+					for (auto s: IR)
+					{
+						s->save_calibration(ir_calibration_addr);
+						ir_calibration_addr += s->calibration_size();
+					}
+					eeprom::flush();
+					break;
+				case 'p':
+					for (auto s: IR)
+						s->print_calibration(bt_uart);
+					break;
+				default:
+					bt_uart.write(ch);
 				}
-				for (auto s: IR)
-					s->calibrate(process);
-				break;
-			case 'C':
-				ir_calibration_addr = IR_calibration_addr;
-				for (auto s: IR)
-				{
-					s->save_calibration(ir_calibration_addr);
-					ir_calibration_addr += s->calibration_size();
-				}
-				eeprom::flush();
-				break;
-			case 'p':
-				for (auto s: IR)
-					s->print_calibration(bt_uart);
-				break;
-			default:
-				bt_uart.write(ch);
 			}
 		}
 
@@ -403,7 +483,7 @@ int main(void)
 		if(debug_sender) 
  		{
 			auto& text_out = debug;
-			auto& bin_out = bt_uart;
+			auto& bin_out = bt_bridge == nullptr ? bt_uart : sink;
 			// IR sensors debug
 			format(text_out, "%5 - ") % time_cnt;
 			time_cnt = 0;
