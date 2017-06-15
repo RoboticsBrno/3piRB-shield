@@ -80,10 +80,17 @@ public:
 		 m_long_value(false),
 		 m_incremental_mode(false),
 		 m_overflow(0),
+		 m_last_value(0),
+		 m_diff_value(0),
 		 comparator_a(*this, 0),
 		 comparator_b(*this, 1),
 		 c_event_channel(event_channel),
-		 c_input_filter(input_filter)
+		 c_input_filter(input_filter),
+		 TICKS_PER_ROTATION(4096),
+		 FIXPOINT_SHIFT(4),
+		 WHEEL_DIAMETER(31.5 * (1 << FIXPOINT_SHIFT)), // diameter of wheel = 31,5 mm => FIX POINT
+		 PI_FIXPOINT(3.14159 * (1 << FIXPOINT_SHIFT)), // PI = 3,14159 => FIX POINT
+		 DISTANCE_CONST(((WHEEL_DIAMETER * uint32_t(PI_FIXPOINT)) << FIXPOINT_SHIFT) / TICKS_PER_ROTATION)
 	{}
 	
 	void mode_incremental(const value_type period = 0, const bool& set_source = true)
@@ -194,6 +201,11 @@ public:
 	{
 		return value();
 	}
+
+	value_type distance_mm()
+	{
+		return (uint64_t(value()) * DISTANCE_CONST) >> (FIXPOINT_SHIFT * 3); // 3 => NUMBER OF FIXPOINT SHIFTS
+	}
 	
 	void clear()
 	{
@@ -236,6 +248,12 @@ public:
 		else
 			--m_overflow;
 	}
+
+	void process()
+	{
+		m_diff_value = value() - m_last_value;
+		m_last_value = value();
+	}
 	
 	void set_value(value_type v)
 	{
@@ -256,12 +274,21 @@ private:
 	volatile bool m_incremental_mode;
 	volatile overflow_type m_overflow;
 	
+	volatile value_type m_last_value;
+	volatile int16_t m_diff_value;
+	timeout m_process_timeout;
+	
 public:
 	comparator_t comparator_a;
 	comparator_t comparator_b;
 	
 	const uint8_t c_event_channel;
 	const EVSYS_DIGFILT_t c_input_filter;
+	const int16_t TICKS_PER_ROTATION;
+	const uint8_t FIXPOINT_SHIFT;
+	const uint16_t WHEEL_DIAMETER;
+	const uint16_t PI_FIXPOINT;
+	const uint16_t DISTANCE_CONST;
 };
 
 

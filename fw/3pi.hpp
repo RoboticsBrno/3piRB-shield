@@ -1,11 +1,15 @@
 #ifndef _3PI_HPP_
 #define _3PI_HPP_
 
+#include "encoder.hpp"
+#include "regulator.hpp"
+
 namespace detail
 {
 namespace R3PI
 {
 #include "3pi_commands.hpp"
+#include "3pi_defines.hpp"
 } // namespace R3PI
 
 template<typename Stream, typename Parser>
@@ -24,6 +28,8 @@ class R3pi
 public:
 	typedef avrlib::timed_command_parser<base_timer_type> cmd_parser_type;
 	typedef data_uart_t link_type;
+	typedef detail::R3PI::motor_power_type motor_power_type;
+	typedef detail::R3PI::motor_speed_type motor_speed_type;
 
 private:
 	class led_t
@@ -92,24 +98,33 @@ private:
 	};
 
 public:
-	typedef int8_t motor_power_type;
+	
 
 	R3pi(pin_t pin_power,
 		 pin_t pin_reset,
 		 pin_t pin_disp_backlight,
 		 adc_t::adc_pin_type adc_vboost,
-		 link_type& link)
+		 link_type& link,
+		 encoder_t& left_enc,
+		 encoder_t& right_enc)
 		: m_pin_power(pin_power),
 		  m_pin_reset(pin_reset),
 		  m_pin_disp_backlight(pin_disp_backlight),
 		  m_vboost(adc_vboost),
 		  m_link(link),
+		  m_enc_left(left_enc),
+		  m_enc_right(right_enc),
+		  m_reg_left(detail::R3PI::MOTOR_POWER_MAX, 1, 0, 0),
+		  m_reg_right(detail::R3PI::MOTOR_POWER_MAX, 1, 0, 0),
+		  m_reg_timout(msec(10)),
 		  m_cmd_parser(base_timer, msec(16)),
 		  m_keep_connection_timeout(msec(250)),
 		  m_bridge(nullptr),
 		  m_led(m_link, detail::R3PI::CMD_LED, detail::R3PI::SCMD_LED_SET),
 		  m_buzzer(m_link, detail::R3PI::CMD_BUZZER, detail::R3PI::SCMD_BUZZER_SET)
-		{}
+		{
+			m_reg_timout.cancel();
+		}
 
 	void init()
 	{
@@ -135,9 +150,23 @@ public:
 	{
 		if (m_bridge != nullptr)
 			return;
+		if (m_reg_timout.running()) {
+			m_reg_timout.cancel();
+		}
 		m_cmd_parser.write(left);
 		m_cmd_parser.write(right);
 		m_cmd_parser.send(m_link, detail::R3PI::CMD_POWER_TANK);
+	}
+
+	void set_motor_speed(motor_speed_type left, motor_speed_type right)
+	{
+		if(!m_reg_timout.running()) {
+			m_reg_timout.start();
+			m_reg_left.clear();
+			m_reg_right.clear();
+		}
+		m_reg_left(left);
+		m_reg_right(right);
 	}
 
 	void stop()
@@ -374,6 +403,11 @@ public:
 			m_keep_connection_timeout.ack();
 			m_link.write(SCMD_NOP);
 		}
+		if (m_reg_timout) {
+			m_reg_timout.ack();
+			set_motor_speed(m_reg_left.process(m_enc_left.value()), 
+							m_reg_right.process(m_enc_right.value()));
+		}
 	}
 
 	static const uint8_t c_sensors = 5;
@@ -385,13 +419,21 @@ private:
 	pin_t m_pin_disp_backlight;
 	adc_t m_vboost;
 	link_type& m_link;
+	
+	encoder_t& m_enc_left;
+	encoder_t& m_enc_right;
+
+	regulator_t<int32_t> m_reg_left;
+	regulator_t<int32_t> m_reg_right;
+	timeout m_reg_timout;
+
 	cmd_parser_type m_cmd_parser;
 	timeout m_keep_connection_timeout;
 	link_type* m_bridge;
 
 	led_t m_led;
 	led_t m_buzzer;
-
+		
 	uint16_t m_sensors[c_sensors];
 	uint16_t m_vbat;
 	uint16_t m_pot;

@@ -137,7 +137,9 @@ R3pi r3pi(pin_3pi_power,
 		  pin_3pi_reset,
 		  pin_disp_backlight_en,
 		  13,
-		  r3pi_uart);
+		  r3pi_uart,
+		  encoder_left,
+		  encoder_right);
 
 void process()
 {
@@ -339,6 +341,9 @@ int main(void)
 
 	data_uart_t* bt_bridge = nullptr;
 
+    // Activate BT BRIDGE (BT -> 3pi)
+    bt_bridge = r3pi.set_bridge(&bt_uart);
+    
 	timeout square_timeout(msec(1000));
 	uint8_t square_state = 0;
 

@@ -26,6 +26,7 @@ private:
 serial_t serial;
 
 #include "../fw/3pi_commands.hpp"
+#include "../fw/3pi_defines.hpp"
 #include "../fw/led_impl.hpp"
 
 template <typename Port, int Pin>
@@ -231,12 +232,12 @@ void run(void)
 				break;
 
 			case CMD_POWER_TANK:
-				if (cmd_parser.size() == 2)
+				if (cmd_parser.size() == 4)
 				{
-					int16_t left_target  = avrlib::clamp<int8_t>(cmd_parser[0], -127, 127);
-					int16_t right_target = avrlib::clamp<int8_t>(cmd_parser[1], -127, 127);
+					int16_t left_target  = avrlib::clamp<motor_power_type>(cmd_parser.read<motor_power_type>(0*sizeof(motor_power_type)), -255, 255);
+					int16_t right_target = avrlib::clamp<motor_power_type>(cmd_parser.read<motor_power_type>(1*sizeof(motor_power_type)), -255, 255);
 
-					setMotorPower(left_target<<1, right_target<<1);
+					setMotorPower(left_target, right_target);
 					
 					emergency_brake_timeout.restart();
 				}
