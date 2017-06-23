@@ -5,6 +5,7 @@ class ir_sensor_t
 {
 public:
 	typedef adc_t::adc_value_type value_type;
+	typedef adc_t::adc_pin_type index_type;
 
 private:
 
@@ -27,24 +28,25 @@ private:
 
 public:
 
-	ir_sensor_t(adc_t::adc_pin_type adc, eeprom::addr_type calibration_addr = -1)
+	ir_sensor_t(index_type adc, eeprom::addr_type calibration_addr = -1)
 		: m_adc(adc), m_calibration()
 	{
 		if (eeprom::is_valid_address(calibration_addr))
 			load_calibration(calibration_addr);
 	}
 
-	value_type raw_value() { return m_adc.value(); }
+	value_type raw_value() { return s_raw_off[m_adc] - s_raw_on[m_adc]; }
 
 	value_type value()
 	{
-		int32_t v = avrlib::clamp(raw_value(), m_calibration.meas_min, m_calibration.meas_max);
-		v -= m_calibration.meas_min;
-		v *= m_calibration.gain;
-		v >>= m_calibration.gain_den_exp;
-		v = avrlib::clamp(v, m_calibration.calib_min, m_calibration.calib_max);
-		v = m_calibration.calib_max - v;
-		return v;
+// 		int32_t v = avrlib::clamp(raw_value(), m_calibration.meas_min, m_calibration.meas_max);
+// 		v -= m_calibration.meas_min;
+// 		v *= m_calibration.gain;
+// 		v >>= m_calibration.gain_den_exp;
+// 		v = avrlib::clamp(v, m_calibration.calib_min, m_calibration.calib_max);
+// 		v = m_calibration.calib_max - v;
+// 		return v;
+		return raw_value();
 	}
 
 	void calibrate(void(*process)())
@@ -73,73 +75,99 @@ public:
 		format_spgm(stream, PSTR("gain %9\n")) % m_calibration.gain;
 	}
 
+	static const index_type sc_sensors_count = 9;
+
 private:
-	adc_t m_adc;
+	index_type m_adc;
 	calibration_t m_calibration;
 
 	static TC0_t& s_blink_timer;
-	static TC1_t& s_current_timer;
+	static ADC_t& s_adc;
 
-	static const uint16_t sc_power_step = 10;
+	static volatile value_type s_raw_on[sc_sensors_count];
+	static volatile value_type s_raw_off[sc_sensors_count];
+	static const index_type s_sensors_tab[sc_sensors_count];
+	static volatile uint8_t s_sensor_group;
+
+	static register8_t* s_evch;
 
 public: // static
-	static void init()
+	static void init(const uint8_t evch)
 	{
+		s_evch = (&EVSYS_CH0MUX + evch);
+		
+		for(auto& v: s_raw_on)
+			v = 0;
+		for(auto& v: s_raw_off)
+			v = 0;
+
 		PORTC.REMAP |= PORT_TC0A_bm | PORT_TC0B_bm;
 		
-		s_blink_timer.PER = 15625; // 2 s
-		s_blink_timer.CCA = 14843;
-		s_blink_timer.CCB = 14843;
-		s_blink_timer.CTRLB = TC0_CCAEN_bm | TC0_CCBEN_bm | TC_WGMODE_DSTOP_gc;
-		s_blink_timer.CTRLA = TC_CLKSEL_OFF_gc;
-		s_blink_timer.CTRLC = TC0_CMPA_bm | TC0_CMPB_bm;
+		const uint16_t per = 53333; // 3.3 ms
+		const uint16_t pwr = 100;
 
-		s_current_timer.PER = 320;
-		s_current_timer.CCA = 240;
-		s_current_timer.CCB = 240;
-		s_current_timer.CTRLB = TC1_CCAEN_bm | TC1_CCBEN_bm | TC_WGMODE_SINGLESLOPE_gc;
-		s_current_timer.CTRLA = TC_CLKSEL_DIV1_gc;
-	}
+		s_blink_timer.PER = per;
+		s_blink_timer.CCA = pwr;
+		s_blink_timer.CCB = pwr;
+		s_blink_timer.CCC = 150;
+		s_blink_timer.CCD = per >> 1;
+		s_blink_timer.CTRLB = TC0_CCAEN_bm | TC0_CCBEN_bm | TC_WGMODE_SINGLESLOPE_gc;
+		off();
 
-	static uint16_t inc_power()
-	{
-		uint16_t p = s_current_timer.CCA;
-		if (p < sc_power_step)
-			p = 0;
-		else
-			p -= sc_power_step;
-		s_current_timer.CCABUF = p;
-		s_current_timer.CCBBUF = p;
-		return s_current_timer.PER - p;
-	}
-
-	static uint16_t dec_power()
-	{
-		uint16_t p = s_current_timer.CCA;
-		const uint16_t m = s_current_timer.PER;
-		p += sc_power_step;
-		if (p > m)
-			p = m;
-		s_current_timer.CCABUF = p;
-		s_current_timer.CCBBUF = p;
-		return m - p;
+		s_adc.PRESCALER = ADC_PRESCALER_DIV16_gc;
+		s_adc.REFCTRL = ADC_REFSEL_INTVCC_gc; // Ref: Vcc/1.6
+		s_adc.EVCTRL = ADC_SWEEP_012_gc | (ADC_EVSEL_0123_gc + (evch << ADC_EVSEL_gp)) | ADC_EVACT_SYNCSWEEP_gc;
+		s_adc.CTRLB = ADC_RESOLUTION_12BIT_gc;
+		s_adc.CTRLA = ADC_ENABLE_bm;
+		s_adc.CH0.CTRL = ADC_CH_INPUTMODE_SINGLEENDED_gc;
+		s_adc.CH0.MUXCTRL = ADC_CH_MUXPOS_PIN1_gc;
+		s_adc.CH1.CTRL = ADC_CH_INPUTMODE_SINGLEENDED_gc;
+		s_adc.CH1.MUXCTRL = ADC_CH_MUXPOS_PIN2_gc;
+		s_adc.CH2.CTRL = ADC_CH_INPUTMODE_SINGLEENDED_gc;
+		s_adc.CH2.MUXCTRL = ADC_CH_MUXPOS_PIN3_gc;
+		s_adc.CH2.INTCTRL = ADC_CH_INTMODE_COMPLETE_gc | ADC_CH_INTLVL_MED_gc;
 	}
 
 	static void on()
 	{
-		s_blink_timer.CTRLA = TC_CLKSEL_DIV1024_gc;
+		s_blink_timer.CTRLA = TC_CLKSEL_DIV2_gc;
 	}
 
 	static void off()
 	{
 		s_blink_timer.CTRLA = TC_CLKSEL_OFF_gc;
-		s_blink_timer.CTRLC = TC0_CMPA_bm | TC0_CMPB_bm;
+		s_blink_timer.CTRLC = 0;
 		s_blink_timer.CNT = 0;
+		*s_evch = EVSYS_CHMUX_TCC0_CCC_gc;
 	}
 
 	static bool is_on()
 	{
 		return s_blink_timer.CTRLA != 0;
+	}
+
+	static void adc_intr()
+	{
+		if(*s_evch == EVSYS_CHMUX_TCC0_CCC_gc)
+		{
+			*s_evch = EVSYS_CHMUX_TCC0_CCD_gc;
+			s_raw_on[s_sensor_group + 0] = s_adc.CH0RES;
+			s_raw_on[s_sensor_group + 1] = s_adc.CH1RES;
+			s_raw_on[s_sensor_group + 2] = s_adc.CH2RES;
+		}
+		else
+		{
+			*s_evch = EVSYS_CHMUX_TCC0_CCC_gc;
+			s_raw_off[s_sensor_group + 0] = s_adc.CH0RES;
+			s_raw_off[s_sensor_group + 1] = s_adc.CH1RES;
+			s_raw_off[s_sensor_group + 2] = s_adc.CH2RES;
+			s_sensor_group += 3;
+			if(s_sensor_group == sc_sensors_count)
+				s_sensor_group = 0;
+			s_adc.CH0.MUXCTRL = ADC_CH_MUXPOS_PIN0_gc + (s_sensors_tab[s_sensor_group + 0] << ADC_CH_MUXPOS_gp);
+			s_adc.CH1.MUXCTRL = ADC_CH_MUXPOS_PIN0_gc + (s_sensors_tab[s_sensor_group + 1] << ADC_CH_MUXPOS_gp);
+			s_adc.CH2.MUXCTRL = ADC_CH_MUXPOS_PIN0_gc + (s_sensors_tab[s_sensor_group + 2] << ADC_CH_MUXPOS_gp);
+		}
 	}
 };
 
@@ -148,7 +176,18 @@ const ir_sensor_t::value_type ir_sensor_t::calibration_t::calib_max = 1000;
 const uint8_t ir_sensor_t::calibration_t::gain_den_exp = 16;
 const int32_t ir_sensor_t::calibration_t::gain_den = 1L<<ir_sensor_t::calibration_t::gain_den_exp;
 
+volatile ir_sensor_t::value_type ir_sensor_t::s_raw_on[ir_sensor_t::sc_sensors_count];
+volatile ir_sensor_t::value_type ir_sensor_t::s_raw_off[ir_sensor_t::sc_sensors_count];
+const ir_sensor_t::index_type ir_sensor_t::s_sensors_tab[ir_sensor_t::sc_sensors_count] = { 9, 10, 11, 12, 1, 0, 15, 13, 14 };
+volatile uint8_t ir_sensor_t::s_sensor_group = 0;
+
 TC0_t& ir_sensor_t::s_blink_timer = TCC0;
-TC1_t& ir_sensor_t::s_current_timer = TCC1;
+ADC_t& ir_sensor_t::s_adc = ADCB;
+register8_t* ir_sensor_t::s_evch = nullptr;
+
+ISR(ADCB_CH2_vect)
+{
+	ir_sensor_t::adc_intr();
+}
 
 #endif

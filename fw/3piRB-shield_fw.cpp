@@ -32,12 +32,12 @@ using avrlib::string;
 
 typedef avrlib::async_usart<avrlib::uart_xmega, DEBUG_UART_RX_BUFF_SIZE, DEBUG_UART_TX_BUFF_SIZE> debug_t; // D0
 debug_t debug;
-ISR(USARTF0_RXC_vect) { debug.intr_rx(); }
+ISR(USARTD0_RXC_vect) { debug.intr_rx(); }
 
 typedef avrlib::async_usart<avrlib::uart_xmega, DATA_UART_RX_BUFF_SIZE, DATA_UART_TX_BUFF_SIZE> data_uart_t;
 
 data_uart_t bt_uart; // F0
-//ISR(USARTF0_RXC_vect) { bt_uart.intr_rx(); }
+ISR(USARTF0_RXC_vect) { bt_uart.intr_rx(); }
 
 data_uart_t r3pi_uart; // E0
 ISR(USARTE0_RXC_vect) { r3pi_uart.intr_rx(); }
@@ -121,8 +121,8 @@ ISR(PORTD_INT0_vect)
 }
 */
 
-encoder_t encoder_left(TCE1, pin_enc_left_a , 0);
-encoder_t encoder_right(TCD1, pin_enc_right_a, 2);
+encoder_t encoder_left(TCE1, pin_enc_left_a , 2);
+encoder_t encoder_right(TCD1, pin_enc_right_a, 4);
 
 ISR(TCE1_OVF_vect) { encoder_left.process_intr(); }
 ISR(TCD1_OVF_vect) { encoder_right.process_intr(); }
@@ -228,8 +228,8 @@ int main(void)
 	
 	init_serial_number();
 	
-	debug.usart().open(USARTF0, calc_baudrate(DEBUG_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
-	//bt_uart.usart().open(USARTF0, calc_baudrate(BT_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
+	debug.usart().open(USARTD0, calc_baudrate(DEBUG_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
+	bt_uart.usart().open(USARTF0, calc_baudrate(BT_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
 	r3pi_uart.usart().open(USARTE0, calc_baudrate(R3PI_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
 	_delay_ms(1);
 
@@ -269,8 +269,8 @@ int main(void)
 	//leds[sensor_to_led(9)]->green.on();
 
 	pin_AREF_EN.set_high();
-	ir_sensor_t::init();
-	//ir_sensor_t::on();
+	ir_sensor_t::init(0);
+	ir_sensor_t::on();
 
 	// adc init
 	adc_t::init();
@@ -281,15 +281,15 @@ int main(void)
 	adc_t adc_3pi_Vbst(14);
 	adc_t adc_Bat_charg_stat(15);
 	
-	ir_sensor_t IR1(1);
-	ir_sensor_t IR2(2);
-	ir_sensor_t IR3(3);
-	ir_sensor_t IR4(4);
-	ir_sensor_t IR5(9);
-	ir_sensor_t IR6(8);
-	ir_sensor_t IR7(7);
-	ir_sensor_t IR8(5);
-	ir_sensor_t IR9(6);
+	ir_sensor_t IR1(0);
+	ir_sensor_t IR2(1);
+	ir_sensor_t IR3(2);
+	ir_sensor_t IR4(3);
+	ir_sensor_t IR5(4);
+	ir_sensor_t IR6(5);
+	ir_sensor_t IR7(6);
+	ir_sensor_t IR8(7);
+	ir_sensor_t IR9(8);
 
 	const uint8_t ADC_IR_COUNT = 9;
 	ir_sensor_t * IR[ADC_IR_COUNT] = {
@@ -321,10 +321,10 @@ int main(void)
 	uint16_t time_cnt = 0;
 
 	timeout debug_sender(msec(200));
+	//debug_sender.cancel();
 
 	timeout blink_timeout(msec(1000));
 	const auto blink_period = (blink_timeout.get_timeout() * 14) >> 4;
-	debug_sender.cancel();
 
 	while(pin_btn_pwr.read()) {
 		process();
@@ -404,12 +404,8 @@ int main(void)
 			case 'f': ir_sensor_t::off();
 				break;
 
-			case '+':
-				format(debug, "power: %3\n") % ir_sensor_t::inc_power();
-				break;
-
-			case '-':
-				format(debug, "power: %3\n") % ir_sensor_t::dec_power();
+			case 't':
+				ir_sensor_t::tp1.toggle();
 				break;
 
 			default:

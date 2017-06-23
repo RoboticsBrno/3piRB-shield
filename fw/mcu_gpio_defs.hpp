@@ -151,8 +151,8 @@ void init_mcu_gpio()
 	pin_arm_i2c0_scl.make_input();
 	pin_arm_i2c1_sda.make_input();
 	pin_arm_i2c1_scl.make_input();
-	pin_arm_uart0_rx.pullup();
-	pin_arm_uart0_tx.make_high();
+	//pin_arm_uart0_rx.pullup();
+	//pin_arm_uart0_tx.make_high();
 	pin_arm_uart1_rx.make_input();
 	pin_arm_uart1_tx.make_input();
 
@@ -213,10 +213,8 @@ void init_mcu_gpio()
 	pin_3pi_reset.make_low();
 	
 	pin_AREF_EN.make_low(); // enable 2,5 V stabilizer for IR phototransistor 
-	pin_IR_front.make_inverted();
-	pin_IR_front.make_high();
-	pin_IR_back_left_right.make_inverted();
-	pin_IR_back_left_right.make_high();
+	pin_IR_front.make_low();
+	pin_IR_back_left_right.make_low();
 
 	pin_SHDN.make_inverted();
 	pin_SHDN.make_low();

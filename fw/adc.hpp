@@ -14,12 +14,12 @@
 
 class adc_t
 {
-	public:
+public:
 	typedef uint8_t adc_pin_type;
 	typedef int16_t adc_value_type;
 
 	adc_t(const adc_pin_type adc_pin)
-	:m_adc_pin(adc_pin), m_value(-1), m_updated(false), m_index(s_max_index < MAX_ADC_PINS_COUNT ? s_max_index : -1)
+		:m_adc_pin(adc_pin), m_value(-1), m_updated(false), m_index(s_max_index < MAX_ADC_PINS_COUNT ? s_max_index : -1)
 	{
 		if(s_max_index < MAX_ADC_PINS_COUNT)
 			s_adcs[s_max_index] = this;
@@ -57,16 +57,18 @@ class adc_t
 
 	adc_pin_type pin() { return m_adc_pin; }
 	uint8_t index() { return m_index; }
-	uint8_t max_index() { return s_max_index; }
 
-	protected:
+protected:
 	adc_pin_type m_adc_pin;
 	adc_value_type m_value;
 	bool m_updated;
 	uint8_t m_index;
 	
-	// static
-	public:
+// static
+public:
+
+	static uint8_t max_index() { return s_max_index; }
+
 	static void init()
 	{
 		ADCA.CH0.CTRL = ADC_CH_INPUTMODE_SINGLEENDED_gc;
