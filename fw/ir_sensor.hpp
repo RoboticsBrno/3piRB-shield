@@ -77,22 +77,69 @@ private:
 	adc_t m_adc;
 	calibration_t m_calibration;
 
+	static TC0_t& s_blink_timer;
+	static TC1_t& s_current_timer;
+
+	static const uint16_t sc_power_step = 10;
+
 public: // static
+	static void init()
+	{
+		PORTC.REMAP |= PORT_TC0A_bm | PORT_TC0B_bm;
+		
+		s_blink_timer.PER = 15625; // 2 s
+		s_blink_timer.CCA = 14843;
+		s_blink_timer.CCB = 14843;
+		s_blink_timer.CTRLB = TC0_CCAEN_bm | TC0_CCBEN_bm | TC_WGMODE_DSTOP_gc;
+		s_blink_timer.CTRLA = TC_CLKSEL_OFF_gc;
+		s_blink_timer.CTRLC = TC0_CMPA_bm | TC0_CMPB_bm;
+
+		s_current_timer.PER = 320;
+		s_current_timer.CCA = 240;
+		s_current_timer.CCB = 240;
+		s_current_timer.CTRLB = TC1_CCAEN_bm | TC1_CCBEN_bm | TC_WGMODE_SINGLESLOPE_gc;
+		s_current_timer.CTRLA = TC_CLKSEL_DIV1_gc;
+	}
+
+	static uint16_t inc_power()
+	{
+		uint16_t p = s_current_timer.CCA;
+		if (p < sc_power_step)
+			p = 0;
+		else
+			p -= sc_power_step;
+		s_current_timer.CCABUF = p;
+		s_current_timer.CCBBUF = p;
+		return s_current_timer.PER - p;
+	}
+
+	static uint16_t dec_power()
+	{
+		uint16_t p = s_current_timer.CCA;
+		const uint16_t m = s_current_timer.PER;
+		p += sc_power_step;
+		if (p > m)
+			p = m;
+		s_current_timer.CCABUF = p;
+		s_current_timer.CCBBUF = p;
+		return m - p;
+	}
+
 	static void on()
 	{
-		pin_IR_front.set_high();
-		pin_IR_back_left_right.set_high();
+		s_blink_timer.CTRLA = TC_CLKSEL_DIV1024_gc;
 	}
 
 	static void off()
 	{
-		pin_IR_front.set_low();
-		pin_IR_back_left_right.set_low();
+		s_blink_timer.CTRLA = TC_CLKSEL_OFF_gc;
+		s_blink_timer.CTRLC = TC0_CMPA_bm | TC0_CMPB_bm;
+		s_blink_timer.CNT = 0;
 	}
 
 	static bool is_on()
 	{
-		return pin_IR_front.read() && pin_IR_back_left_right.read();
+		return s_blink_timer.CTRLA != 0;
 	}
 };
 
@@ -100,5 +147,8 @@ const ir_sensor_t::value_type ir_sensor_t::calibration_t::calib_min = 0;
 const ir_sensor_t::value_type ir_sensor_t::calibration_t::calib_max = 1000;
 const uint8_t ir_sensor_t::calibration_t::gain_den_exp = 16;
 const int32_t ir_sensor_t::calibration_t::gain_den = 1L<<ir_sensor_t::calibration_t::gain_den_exp;
+
+TC0_t& ir_sensor_t::s_blink_timer = TCC0;
+TC1_t& ir_sensor_t::s_current_timer = TCC1;
 
 #endif

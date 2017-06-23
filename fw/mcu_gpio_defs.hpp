@@ -213,8 +213,10 @@ void init_mcu_gpio()
 	pin_3pi_reset.make_low();
 	
 	pin_AREF_EN.make_low(); // enable 2,5 V stabilizer for IR phototransistor 
-	pin_IR_front.make_low(); // enable front IR leds
-	pin_IR_back_left_right.make_low();
+	pin_IR_front.make_inverted();
+	pin_IR_front.make_high();
+	pin_IR_back_left_right.make_inverted();
+	pin_IR_back_left_right.make_high();
 
 	pin_SHDN.make_inverted();
 	pin_SHDN.make_low();

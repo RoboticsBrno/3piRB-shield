@@ -32,12 +32,12 @@ using avrlib::string;
 
 typedef avrlib::async_usart<avrlib::uart_xmega, DEBUG_UART_RX_BUFF_SIZE, DEBUG_UART_TX_BUFF_SIZE> debug_t; // D0
 debug_t debug;
-ISR(USARTD0_RXC_vect) { debug.intr_rx(); }
+ISR(USARTF0_RXC_vect) { debug.intr_rx(); }
 
 typedef avrlib::async_usart<avrlib::uart_xmega, DATA_UART_RX_BUFF_SIZE, DATA_UART_TX_BUFF_SIZE> data_uart_t;
 
 data_uart_t bt_uart; // F0
-ISR(USARTF0_RXC_vect) { bt_uart.intr_rx(); }
+//ISR(USARTF0_RXC_vect) { bt_uart.intr_rx(); }
 
 data_uart_t r3pi_uart; // E0
 ISR(USARTE0_RXC_vect) { r3pi_uart.intr_rx(); }
@@ -228,8 +228,8 @@ int main(void)
 	
 	init_serial_number();
 	
-	debug.usart().open(USARTD0, calc_baudrate(DEBUG_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
-	bt_uart.usart().open(USARTF0, calc_baudrate(BT_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
+	debug.usart().open(USARTF0, calc_baudrate(DEBUG_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
+	//bt_uart.usart().open(USARTF0, calc_baudrate(BT_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
 	r3pi_uart.usart().open(USARTE0, calc_baudrate(R3PI_UART_BAUDRATE, F_CPU), avrlib::uart_intr_med);
 	_delay_ms(1);
 
@@ -269,7 +269,8 @@ int main(void)
 	//leds[sensor_to_led(9)]->green.on();
 
 	pin_AREF_EN.set_high();
-	ir_sensor_t::on();
+	ir_sensor_t::init();
+	//ir_sensor_t::on();
 
 	// adc init
 	adc_t::init();
@@ -323,7 +324,7 @@ int main(void)
 
 	timeout blink_timeout(msec(1000));
 	const auto blink_period = (blink_timeout.get_timeout() * 14) >> 4;
-	//debug_sender.cancel();
+	debug_sender.cancel();
 
 	while(pin_btn_pwr.read()) {
 		process();
@@ -340,6 +341,7 @@ int main(void)
 	data_uart_t* bt_bridge = nullptr;
 
 	timeout square_timeout(msec(1000));
+	square_timeout.cancel();
 	uint8_t square_state = 0;
 
 	for(;;)
@@ -395,6 +397,21 @@ int main(void)
 			case 'l':
 				r3pi_uart.write(0xB3);
 				break;
+
+			case 'o': ir_sensor_t::on();
+				break;
+
+			case 'f': ir_sensor_t::off();
+				break;
+
+			case '+':
+				format(debug, "power: %3\n") % ir_sensor_t::inc_power();
+				break;
+
+			case '-':
+				format(debug, "power: %3\n") % ir_sensor_t::dec_power();
+				break;
+
 			default:
 				debug.write(ch);
 			}
